@@ -21,6 +21,10 @@ contract RandomSVG is ERC721URIStorage, VRFConsumerBase {
     string[] public pathCommands;
     string[] colors;
 
+    // topics:
+    // event -> topics[0]
+    // requestId -> topics[1]
+    // tokenId -> topics[2]
     event requestedRandomSVG(
         bytes32 indexed requestId,
         uint256 indexed tokenId
@@ -130,82 +134,77 @@ contract RandomSVG is ERC721URIStorage, VRFConsumerBase {
         );
 
         uint256 randomNumber = tokenIdToRandomNumber[tokenId];
-        string memory svg = generateRandomSVG(randomNumber);
+        string memory svg = generateSVG(randomNumber);
         string memory imageURI = svgToImageURI(svg);
         string memory tokenURI = formatTokenURI(imageURI);
         _setTokenURI(tokenId, tokenURI);
 
-        emit CreatedRandomSVG(tokenId, tokenURI);
+        emit CreatedRandomSVG(tokenId, svg);
     }
 
-    function generateRandomSVG(uint256 randomNumber)
+    function generateSVG(uint256 _randomness)
         public
         view
         returns (string memory finalSvg)
     {
-        uint256 numberOfPaths = (randomNumber % maxNumberOfPaths) + 1;
-        string memory sizeInStr = uint2str(size);
-
+        // We will only use the path element, with stroke and d elements
+        uint256 numberOfPaths = (_randomness % maxNumberOfPaths) + 1;
         finalSvg = string(
             abi.encodePacked(
                 "<svg xmlns='http://www.w3.org/2000/svg' height='",
-                sizeInStr,
+                uint2str(size),
                 "' width='",
-                sizeInStr,
+                uint2str(size),
                 "'>"
             )
         );
-
         for (uint256 i = 0; i < numberOfPaths; i++) {
-            uint256 newRNG = uint256(keccak256(abi.encode(randomNumber, i)));
-            string memory pathSvg = generatePath(newRNG);
+            // we get a new random number for each path
+            string memory pathSvg = generatePath(
+                uint256(keccak256(abi.encode(_randomness, i)))
+            );
             finalSvg = string(abi.encodePacked(finalSvg, pathSvg));
         }
-
         finalSvg = string(abi.encodePacked(finalSvg, "</svg>"));
     }
 
-    function generatePath(uint256 randomNumber)
+    function generatePath(uint256 _randomness)
         public
         view
         returns (string memory pathSvg)
     {
-        uint256 numberOfPathCommands = (randomNumber %
-            maxNumberOfPathCommands) + 1;
+        uint256 numberOfPathCommands = (_randomness % maxNumberOfPathCommands) +
+            1;
         pathSvg = "<path d='";
-
         for (uint256 i = 0; i < numberOfPathCommands; i++) {
-            uint256 newRNG = uint256(
-                keccak256(abi.encode(randomNumber, size + 1))
+            string memory pathCommand = generatePathCommand(
+                uint256(keccak256(abi.encode(_randomness, size + i)))
             );
-            string memory pathCommand = generatePathCommand(newRNG);
             pathSvg = string(abi.encodePacked(pathSvg, pathCommand));
         }
-
-        string memory color = colors[randomNumber % colors.length];
+        string memory color = colors[_randomness % colors.length];
         pathSvg = string(
             abi.encodePacked(
                 pathSvg,
                 "' fill='transparent' stroke='",
                 color,
-                "'>"
+                "'/>"
             )
         );
     }
 
-    function generatePathCommand(uint256 randomNumber)
+    function generatePathCommand(uint256 _randomness)
         public
         view
         returns (string memory pathCommand)
     {
-        pathCommand = pathCommands[randomNumber % pathCommands.length];
+        pathCommand = pathCommands[_randomness % pathCommands.length];
         uint256 parameterOne = uint256(
-            keccak256(abi.encode(randomNumber, size * 2))
-        );
+            keccak256(abi.encode(_randomness, size * 2))
+        ) % size;
         uint256 parameterTwo = uint256(
-            keccak256(abi.encode(randomNumber, size * 3))
-        );
-
+            keccak256(abi.encode(_randomness, size * 2 + 1))
+        ) % size;
         pathCommand = string(
             abi.encodePacked(
                 pathCommand,
